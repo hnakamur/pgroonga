@@ -24,7 +24,7 @@ CREATE FUNCTION pgroonga.command(groongaCommand text)
 	STRICT;
 
 CREATE FUNCTION pgroonga.ctid("row" record)
-	RETURNS int64
+	RETURNS cstring
 	AS 'MODULE_PATHNAME', 'pgroonga_ctid'
 	LANGUAGE C
 	VOLATILE

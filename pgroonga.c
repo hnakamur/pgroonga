@@ -1302,14 +1302,18 @@ pgroonga_command(PG_FUNCTION_ARGS)
 }
 
 /**
- * pgroonga.ctid(row record) : int64
+ * pgroonga.ctid(row record) : cstring
  */
 Datum
 pgroonga_ctid(PG_FUNCTION_ARGS)
 {
 	HeapTupleHeader header = PG_GETARG_HEAPTUPLEHEADER(0);
 	uint64 tupleID = CtidToUInt64(&(header->t_ctid));
-	PG_RETURN_INT64((int64)tupleID);
+	char buf[20];
+	char *copiedCtid;
+	snprintf(buf, sizeof(buf), "%lu", tupleID);
+	copiedCtid = pstrdup(buf);
+	PG_RETURN_CSTRING(copiedCtid);
 }
 
 static grn_bool
