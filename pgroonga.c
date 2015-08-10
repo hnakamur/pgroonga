@@ -156,6 +156,7 @@ static slist_head PGrnScanOpaques = SLIST_STATIC_INIT(PGrnScanOpaques);
 PG_FUNCTION_INFO_V1(pgroonga_score);
 PG_FUNCTION_INFO_V1(pgroonga_table_name);
 PG_FUNCTION_INFO_V1(pgroonga_command);
+PG_FUNCTION_INFO_V1(pgroonga_ctid);
 
 PG_FUNCTION_INFO_V1(pgroonga_contain_text);
 PG_FUNCTION_INFO_V1(pgroonga_contain_text_array);
@@ -1298,6 +1299,17 @@ pgroonga_command(PG_FUNCTION_ARGS)
 	result = cstring_to_text_with_len(GRN_TEXT_VALUE(&buffer),
 									  GRN_TEXT_LEN(&buffer));
 	PG_RETURN_TEXT_P(result);
+}
+
+/**
+ * pgroonga.ctid(row record) : int64
+ */
+Datum
+pgroonga_ctid(PG_FUNCTION_ARGS)
+{
+	HeapTupleHeader header = PG_GETARG_HEAPTUPLEHEADER(0);
+	uint64 tupleID = CtidToUInt64(&(header->t_ctid));
+	PG_RETURN_INT64((int64)tupleID);
 }
 
 static grn_bool
