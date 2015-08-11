@@ -1247,7 +1247,7 @@ PGrnIndexNameToSourceTableName(Datum indexNameDatum)
 	snprintf(tableName, sizeof(tableName),
 			 PGrnSourcesTableNameFormat,
 			 fileNodeOid);
-    copiedTableName = pstrdup(tableName);
+	copiedTableName = pstrdup(tableName);
 	return copiedTableName;
 }
 
@@ -1259,8 +1259,8 @@ pgroonga_table_name(PG_FUNCTION_ARGS)
 {
 	Datum indexNameDatum = PG_GETARG_DATUM(0);
 	char *copiedTableName;
-    
-    copiedTableName = PGrnIndexNameToSourceTableName(indexNameDatum);
+
+	copiedTableName = PGrnIndexNameToSourceTableName(indexNameDatum);
 	PG_RETURN_CSTRING(copiedTableName);
 }
 
@@ -1303,7 +1303,7 @@ PGrnCommand(char *groongaCommand, int groongaCommandLen)
 				 GRN_TEXT_VALUE(&footBuffer), GRN_TEXT_LEN(&footBuffer));
 	result = cstring_to_text_with_len(GRN_TEXT_VALUE(&buffer),
 									  GRN_TEXT_LEN(&buffer));
-    return result;
+	return result;
 }
 
 /**
@@ -1332,54 +1332,54 @@ pgroonga_snippet_html(PG_FUNCTION_ARGS)
 	Datum columnNameDatum = PG_GETARG_DATUM(3);
 	uint64 tupleID;
 	char *sourceTableName;
-    char *columnName;
-    grn_obj escapedQuery;
-    grn_rc rc;
-    char *queryText;
-    char *commandBuf;
-    int commandBufLen;
-    int neededByteSizeWithoutNul;
+	char *columnName;
+	grn_obj escapedQuery;
+	grn_rc rc;
+	char *queryText;
+	char *commandBuf;
+	int commandBufLen;
+	int neededByteSizeWithoutNul;
 	text *result;
-    
+	
 	tupleID = CtidToUInt64(&(header->t_ctid));
-    sourceTableName = PGrnIndexNameToSourceTableName(indexNameDatum);
-    columnName = DatumGetCString(columnNameDatum);
+	sourceTableName = PGrnIndexNameToSourceTableName(indexNameDatum);
+	columnName = DatumGetCString(columnNameDatum);
 
 	GRN_TEXT_INIT(&escapedQuery, GRN_OBJ_DO_SHALLOW_COPY);
-    rc = grn_expr_syntax_escape_query(ctx, VARDATA_ANY(query), VARSIZE_ANY_EXHDR(query), &escapedQuery);
-    if (rc != GRN_SUCCESS)
-    {
-        ereport(ERROR,
-                (errcode(PGrnRCToPgErrorCode(rc)),
-                 errmsg("pgroonga: failed to escape query: %s",
-                        ctx->errbuf)));
-        PG_RETURN_NULL();
-    }
+	rc = grn_expr_syntax_escape_query(ctx, VARDATA_ANY(query), VARSIZE_ANY_EXHDR(query), &escapedQuery);
+	if (rc != GRN_SUCCESS)
+	{
+		ereport(ERROR,
+				(errcode(PGrnRCToPgErrorCode(rc)),
+				 errmsg("pgroonga: failed to escape query: %s",
+						ctx->errbuf)));
+		PG_RETURN_NULL();
+	}
 
-    queryText = pnstrdup(GRN_TEXT_VALUE(&escapedQuery),
-                         GRN_TEXT_LEN(&escapedQuery));
+	queryText = pnstrdup(GRN_TEXT_VALUE(&escapedQuery),
+						 GRN_TEXT_LEN(&escapedQuery));
 	GRN_OBJ_FIN(ctx, &escapedQuery);
 
 	commandBufLen = 1024;
-    commandBuf = (char *)palloc0(sizeof(char) * commandBufLen);
+	commandBuf = (char *)palloc0(sizeof(char) * commandBufLen);
 	neededByteSizeWithoutNul = snprintf(commandBuf, commandBufLen,
 			"select %s --command_version 2 --output_columns \"snippet_html(%s)\" --match_columns \"%s\" --query \"%s\" --filter \"ctid == %lu\"",
-            sourceTableName, columnName, columnName, queryText, tupleID);
-            /* TODO: stop hardcoding "ctid" */
-    if (commandBufLen < neededByteSizeWithoutNul + 1) {
-    	commandBufLen = neededByteSizeWithoutNul + 1;
-        commandBuf = repalloc(commandBuf, commandBufLen);
-        snprintf(commandBuf, commandBufLen,
-                "select %s --command_version 2 --output_columns \"snippet_html(%s)\" --match_columns \"%s\" --query \"%s\" --filter \"ctid == %lu\"",
-                sourceTableName, columnName, columnName, queryText, tupleID);
-    }
+			sourceTableName, columnName, columnName, queryText, tupleID);
+			/* TODO: stop hardcoding "ctid" */
+	if (commandBufLen < neededByteSizeWithoutNul + 1) {
+		commandBufLen = neededByteSizeWithoutNul + 1;
+		commandBuf = repalloc(commandBuf, commandBufLen);
+		snprintf(commandBuf, commandBufLen,
+				"select %s --command_version 2 --output_columns \"snippet_html(%s)\" --match_columns \"%s\" --query \"%s\" --filter \"ctid == %lu\"",
+				sourceTableName, columnName, columnName, queryText, tupleID);
+	}
 
 	result = PGrnCommand(commandBuf,
 						 commandBufLen - 1);
 
-    pfree(commandBuf);
-    pfree(queryText);
-    pfree(sourceTableName);
+	pfree(commandBuf);
+	pfree(queryText);
+	pfree(sourceTableName);
 	PG_RETURN_TEXT_P(result);
 }
 
