@@ -156,7 +156,7 @@ static slist_head PGrnScanOpaques = SLIST_STATIC_INIT(PGrnScanOpaques);
 PG_FUNCTION_INFO_V1(pgroonga_score);
 PG_FUNCTION_INFO_V1(pgroonga_table_name);
 PG_FUNCTION_INFO_V1(pgroonga_command);
-PG_FUNCTION_INFO_V1(pgroonga_ctid);
+PG_FUNCTION_INFO_V1(pgroonga_snippet_html);
 
 PG_FUNCTION_INFO_V1(pgroonga_contain_text);
 PG_FUNCTION_INFO_V1(pgroonga_contain_text_array);
@@ -1209,13 +1209,9 @@ pgroonga_score(PG_FUNCTION_ARGS)
 	PG_RETURN_FLOAT8(score);
 }
 
-/**
- * pgroonga.table_name(indexName cstring) : cstring
- */
-Datum
-pgroonga_table_name(PG_FUNCTION_ARGS)
+static char *
+PGrnIndexNameToSourceTableName(Datum indexNameDatum)
 {
-	Datum indexNameDatum = PG_GETARG_DATUM(0);
 	Datum indexOidDatum;
 	Oid indexOid;
 	Oid fileNodeOid;
@@ -1251,24 +1247,33 @@ pgroonga_table_name(PG_FUNCTION_ARGS)
 	snprintf(tableName, sizeof(tableName),
 			 PGrnSourcesTableNameFormat,
 			 fileNodeOid);
-	copiedTableName = pstrdup(tableName);
-	PG_RETURN_CSTRING(copiedTableName);
+    copiedTableName = pstrdup(tableName);
+	return copiedTableName;
 }
 
 /**
- * pgroonga.command(groongaCommand text) : text
+ * pgroonga.table_name(indexName cstring) : cstring
  */
 Datum
-pgroonga_command(PG_FUNCTION_ARGS)
+pgroonga_table_name(PG_FUNCTION_ARGS)
 {
-	text *groongaCommand = PG_GETARG_TEXT_PP(0);
+	Datum indexNameDatum = PG_GETARG_DATUM(0);
+	char *copiedTableName;
+    
+    copiedTableName = PGrnIndexNameToSourceTableName(indexNameDatum);
+	PG_RETURN_CSTRING(copiedTableName);
+}
+
+static text *
+PGrnCommand(char *groongaCommand, int groongaCommandLen)
+{
 	grn_rc rc;
 	int flags = 0;
 	text *result;
 
 	grn_ctx_send(ctx,
-				 VARDATA_ANY(groongaCommand),
-				 VARSIZE_ANY_EXHDR(groongaCommand), 0);
+				 groongaCommand,
+				 groongaCommandLen, 0);
 	rc = ctx->rc;
 
 	GRN_BULK_REWIND(&bodyBuffer);
@@ -1298,22 +1303,81 @@ pgroonga_command(PG_FUNCTION_ARGS)
 				 GRN_TEXT_VALUE(&footBuffer), GRN_TEXT_LEN(&footBuffer));
 	result = cstring_to_text_with_len(GRN_TEXT_VALUE(&buffer),
 									  GRN_TEXT_LEN(&buffer));
+    return result;
+}
+
+/**
+ * pgroonga.command(groongaCommand text) : text
+ */
+Datum
+pgroonga_command(PG_FUNCTION_ARGS)
+{
+	text *groongaCommand = PG_GETARG_TEXT_PP(0);
+	text *result;
+
+	result = PGrnCommand(VARDATA_ANY(groongaCommand),
+						 VARSIZE_ANY_EXHDR(groongaCommand));
 	PG_RETURN_TEXT_P(result);
 }
 
 /**
- * pgroonga.ctid(row record) : cstring
+ * pgroonga.snippet_html(row record, query text, indexName cstring, columnName cstring) : text
  */
 Datum
-pgroonga_ctid(PG_FUNCTION_ARGS)
+pgroonga_snippet_html(PG_FUNCTION_ARGS)
 {
 	HeapTupleHeader header = PG_GETARG_HEAPTUPLEHEADER(0);
-	uint64 tupleID = CtidToUInt64(&(header->t_ctid));
-	char buf[20];
-	char *copiedCtid;
-	snprintf(buf, sizeof(buf), "%lu", tupleID);
-	copiedCtid = pstrdup(buf);
-	PG_RETURN_CSTRING(copiedCtid);
+	text *query = PG_GETARG_TEXT_PP(1);
+	Datum indexNameDatum = PG_GETARG_DATUM(2);
+	Datum columnNameDatum = PG_GETARG_DATUM(3);
+	uint64 tupleID;
+	char *sourceTableName;
+    char *columnName;
+    grn_obj escapedQuery;
+    grn_rc rc;
+    char *queryText;
+    char *commandBuf;
+    int commandBufLen;
+	text *result;
+    
+	tupleID = CtidToUInt64(&(header->t_ctid));
+    sourceTableName = PGrnIndexNameToSourceTableName(indexNameDatum);
+    columnName = DatumGetCString(columnNameDatum);
+
+	GRN_TEXT_INIT(&escapedQuery, GRN_OBJ_DO_SHALLOW_COPY);
+    rc = grn_expr_syntax_escape_query(ctx, VARDATA_ANY(query), VARSIZE_ANY_EXHDR(query), &escapedQuery);
+    if (rc != GRN_SUCCESS)
+    {
+        ereport(ERROR,
+                (errcode(PGrnRCToPgErrorCode(rc)),
+                 errmsg("pgroonga: failed to escape query: %s",
+                        ctx->errbuf)));
+        PG_RETURN_NULL();
+    }
+
+    queryText = pnstrdup(GRN_TEXT_VALUE(&escapedQuery),
+                         GRN_TEXT_LEN(&escapedQuery));
+	GRN_OBJ_FIN(ctx, &escapedQuery);
+
+    commandBuf = (char *)palloc(sizeof(char) * 1024);
+	commandBufLen = snprintf(commandBuf, sizeof(commandBuf),
+			"select %s --command_version 2 --output_columns \"snippet_html(%s)\" --match_columns \"%s\" --query \"%s\" --filter \"ctid == %lu\"",
+            sourceTableName, columnName, columnName, queryText, tupleID);
+            /* TODO: stop hardcoding "ctid" */
+    if (commandBufLen >= sizeof(commandBuf)) {
+        commandBuf = repalloc(commandBuf, commandBufLen + 1);
+        commandBufLen = snprintf(commandBuf, sizeof(commandBuf),
+                "select %s --command_version 2 --output_columns \"snippet_html(%s)\" --match_columns \"%s\" --query \"%s\" --filter \"ctid == %lu\"",
+                sourceTableName, columnName, columnName, queryText, tupleID);
+    }
+
+	result = PGrnCommand(commandBuf,
+						 commandBufLen - 1);
+
+    pfree(commandBuf);
+    pfree(queryText);
+    pfree(sourceTableName);
+	PG_RETURN_TEXT_P(result);
 }
 
 static grn_bool

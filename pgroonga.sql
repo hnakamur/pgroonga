@@ -23,9 +23,9 @@ CREATE FUNCTION pgroonga.command(groongaCommand text)
 	VOLATILE
 	STRICT;
 
-CREATE FUNCTION pgroonga.ctid("row" record)
-	RETURNS cstring
-	AS 'MODULE_PATHNAME', 'pgroonga_ctid'
+CREATE FUNCTION pgroonga.snippet_html("row" record, query text, indexName cstring, columnName cstring)
+	RETURNS text
+	AS 'MODULE_PATHNAME', 'pgroonga_snippet_html'
 	LANGUAGE C
 	VOLATILE
 	STRICT;
