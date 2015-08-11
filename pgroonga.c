@@ -1338,6 +1338,7 @@ pgroonga_snippet_html(PG_FUNCTION_ARGS)
     char *queryText;
     char *commandBuf;
     int commandBufLen;
+    int neededByteSizeWithoutNul;
 	text *result;
     
 	tupleID = CtidToUInt64(&(header->t_ctid));
@@ -1359,14 +1360,16 @@ pgroonga_snippet_html(PG_FUNCTION_ARGS)
                          GRN_TEXT_LEN(&escapedQuery));
 	GRN_OBJ_FIN(ctx, &escapedQuery);
 
-    commandBuf = (char *)palloc(sizeof(char) * 1024);
-	commandBufLen = snprintf(commandBuf, sizeof(commandBuf),
+	commandBufLen = 1024;
+    commandBuf = (char *)palloc0(sizeof(char) * commandBufLen);
+	neededByteSizeWithoutNul = snprintf(commandBuf, commandBufLen,
 			"select %s --command_version 2 --output_columns \"snippet_html(%s)\" --match_columns \"%s\" --query \"%s\" --filter \"ctid == %lu\"",
             sourceTableName, columnName, columnName, queryText, tupleID);
             /* TODO: stop hardcoding "ctid" */
-    if (commandBufLen >= sizeof(commandBuf)) {
-        commandBuf = repalloc(commandBuf, commandBufLen + 1);
-        commandBufLen = snprintf(commandBuf, sizeof(commandBuf),
+    if (commandBufLen < neededByteSizeWithoutNul + 1) {
+    	commandBufLen = neededByteSizeWithoutNul + 1;
+        commandBuf = repalloc(commandBuf, commandBufLen);
+        snprintf(commandBuf, commandBufLen,
                 "select %s --command_version 2 --output_columns \"snippet_html(%s)\" --match_columns \"%s\" --query \"%s\" --filter \"ctid == %lu\"",
                 sourceTableName, columnName, columnName, queryText, tupleID);
     }
